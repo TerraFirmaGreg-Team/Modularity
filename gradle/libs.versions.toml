@@ -8,7 +8,7 @@ fastutil = "8.5.19"
 spotless = "8.10.4"
 palantir-java-format = "2.102.0"
 shadow = "9.6.1"
-konf = "1.0.0"
+konf = "0.1.0"
 
 [libraries]
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
