@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [
+      gradle.properties,
+      .github/workflows/release.yml
+    ]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version, skip if tagged
+        id: meta
+        run: |
+          version=$(grep -E '^lib_version' gradle.properties | tr -d ' ' | cut -d= -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          git tag -l "$version" "$version" | grep -q . && echo "skip=true" >> "$GITHUB_OUTPUT" || true
+
+      - uses: actions/setup-java@v4
+        if: steps.meta.outputs.skip != 'true'
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.meta.outputs.skip != 'true'
+
+      - name: Build
+        if: steps.meta.outputs.skip != 'true'
+        run: |
+          chmod +x gradlew
+          ./gradlew build
+
+      - name: Publish to GitHub Packages
+        if: steps.meta.outputs.skip != 'true'
+        run: ./gradlew publish
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag & GitHub Release
+        if: steps.meta.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.version }}
+          files: build/libs/*.jar
+          generate_release_notes: true

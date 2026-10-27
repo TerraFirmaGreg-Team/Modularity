@@ -1,0 +1,120 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    alias(libs.plugins.spotless)
+    alias(libs.plugins.shadow)
+}
+
+group = "${lib_package}"
+version = "${lib_version}"
+
+base {
+    archivesName = "${lib_name}"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(findProperty('java_version') as String)
+    }
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven {
+        name = 'GitHubPackages'
+        url = uri('https://maven.pkg.github.com/terrafirmagreg-team/konf')
+        credentials {
+            username = findProperty('gpr.user') ?: System.getenv('GITHUB_ACTOR')
+            password = findProperty('gpr.key') ?: System.getenv('GITHUB_TOKEN')
+        }
+    }
+}
+
+dependencies {
+    compileOnly libs.lombok
+    annotationProcessor libs.lombok
+    testCompileOnly libs.lombok
+    testAnnotationProcessor libs.lombok
+
+    compileOnly libs.jspecify
+
+    api libs.konf
+    api libs.neoforged.bus
+    api libs.fastutil
+
+    implementation libs.slf4j.api
+
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly libs.junit.platform.launcher
+    testRuntimeOnly libs.slf4j.simple
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = (findProperty('java_version') as String).toInteger()
+    options.compilerArgs << '-Xlint:deprecation'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+spotless {
+    encoding 'UTF-8'
+    java {
+        target 'src/*/java/**/*.java'
+        shortenFullyQualifiedTypes()
+        removeUnusedImports()
+        palantirJavaFormat(libs.versions.palantir.java.format.get()).formatJavadoc(true)
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+tasks.named('jar') {
+    archiveClassifier = 'thin'
+    manifest {
+        attributes(
+                'Implementation-Title': lib_name,
+                'Implementation-Version': version
+        )
+    }
+}
+
+tasks.named('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    archiveClassifier = ''
+    mergeServiceFiles()
+    exclude 'module-info.class'
+    dependencies {
+        include(dependency('net.neoforged:bus:.*'))
+        include(dependency('net.jodah:typetools:.*'))
+        include(dependency('org.ow2.asm:asm:.*'))
+        include(dependency('org.apache.logging.log4j:log4j-api:.*'))
+        include(dependency('it.unimi.dsi:fastutil:.*'))
+        include(dependency('team.terrafirmagreg:konf:.*'))
+        include(dependency('com.electronwill.night-config:.*'))
+        include(dependency('com.typesafe:config:.*'))
+        include(dependency('org.yaml:snakeyaml:.*'))
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.shadow
+            artifactId = "${lib_name}"
+        }
+    }
+    repositories {
+        maven {
+            name = 'GitHubPackages'
+            url = uri('https://maven.pkg.github.com/terrafirmagreg-team/modularity')
+            credentials {
+                username = findProperty('gpr.user') ?: System.getenv('GITHUB_ACTOR')
+                password = findProperty('gpr.key') ?: System.getenv('GITHUB_TOKEN')
+            }
+        }
+    }
+}
