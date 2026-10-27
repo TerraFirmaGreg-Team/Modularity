@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - gradle.properties,
+      - gradle.properties
       - .github/workflows/release.yml
 
 permissions:
@@ -40,6 +40,9 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew build
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GPR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Publish to GitHub Packages
         if: steps.meta.outputs.skip != 'true'
