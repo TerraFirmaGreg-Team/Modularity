@@ -3,10 +3,9 @@ name: Release
 on:
   push:
     branches: [main]
-    paths: [
-      gradle.properties,
-      .github/workflows/release.yml
-    ]
+    paths:
+      - gradle.properties,
+      - .github/workflows/release.yml
 
 permissions:
   contents: write
