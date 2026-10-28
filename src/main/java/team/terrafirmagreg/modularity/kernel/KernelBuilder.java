@@ -12,6 +12,7 @@ public final class KernelBuilder {
 
     Path configDir;
     EventBus bus;
+    boolean memoryConfigs;
 
     @Nullable
     ModuleRegistrate registrate;
@@ -30,6 +31,15 @@ public final class KernelBuilder {
 
     public KernelBuilder bus(EventBus bus) {
         this.bus = bus;
+        return this;
+    }
+
+    public KernelBuilder memoryConfigs() {
+        return memoryConfigs(true);
+    }
+
+    public KernelBuilder memoryConfigs(boolean memoryConfigs) {
+        this.memoryConfigs = memoryConfigs;
         return this;
     }
 

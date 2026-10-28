@@ -29,4 +29,10 @@ public sealed class ModuleEvent extends Event {
             super(id, module);
         }
     }
+
+    public static final class Reloaded extends ModuleEvent {
+        public Reloaded(Identifier id, Module module) {
+            super(id, module);
+        }
+    }
 }

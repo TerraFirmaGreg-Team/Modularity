@@ -10,6 +10,7 @@ import team.terrafirmagreg.modularity.module.Module;
 import team.terrafirmagreg.modularity.module.ModuleContext;
 import team.terrafirmagreg.modularity.module.ModuleEntry;
 import team.terrafirmagreg.modularity.module.ModuleSpec;
+import team.terrafirmagreg.modularity.module.Timings.Phase;
 
 @UtilityClass
 final class UnitPipeline {
@@ -48,7 +49,7 @@ final class UnitPipeline {
 
         T unit;
         ModuleContext ctx;
-        try {
+        try (var ignored = entry.phase(Phase.CONSTRUCT)) {
             unit = entry.construct();
             ctx = new ModuleContext(entry.id(), LoggerFactory.getLogger(kernel.appId() + "." + id), kernel, entry);
             entry.attach(ctx, unit);
@@ -58,7 +59,7 @@ final class UnitPipeline {
             log.error("Module '{}' failed to construct — disabling", id, t);
             return;
         }
-        try {
+        try (var ignored = entry.phase(Phase.DECLARE)) {
             if (entry.claimDeclaration()) {
                 unit.declare(ctx);
             }
@@ -67,8 +68,10 @@ final class UnitPipeline {
             log.error("Module '{}' threw during declaration — disabling", id, t);
             return;
         }
-        Subscribers.subscribe(kernel.bus(), entry, unit, spec);
-        try {
+        try (var ignored = entry.phase(Phase.SUBSCRIBE)) {
+            Subscribers.subscribe(kernel.bus(), entry, unit, spec);
+        }
+        try (var ignored = entry.phase(Phase.ENABLE)) {
             unit.onEnable(ctx);
         } catch (Throwable t) {
             Subscribers.unsubscribe(kernel.bus(), entry, unit, spec);
@@ -77,6 +80,16 @@ final class UnitPipeline {
             log.error("Module '{}' threw during activation — rolled back to disabled", id, t);
             return;
         }
+        entry.gate(true);
         kernel.post(new ModuleEvent.Enabled(entry.id(), unit));
+        var t = entry.timings();
+        log.debug(
+                "Module '{}' enabled in {}ms (construct={}, declare={}, subscribe={}, enable={})",
+                id,
+                t.totalNanos() / 1_000_000L,
+                t.constructNanos() / 1_000_000L,
+                t.declareNanos() / 1_000_000L,
+                t.subscribeNanos() / 1_000_000L,
+                t.enableNanos() / 1_000_000L);
     }
 }

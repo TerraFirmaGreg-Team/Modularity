@@ -10,17 +10,21 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import team.terrafirmagreg.konf.ConfigFile;
 import team.terrafirmagreg.konf.Configs;
+import team.terrafirmagreg.konf.InvalidConfigException;
+import team.terrafirmagreg.konf.format.ConfigFormat;
 import team.terrafirmagreg.modularity.Identifier;
 
 final class ConfigFiles {
 
     private final Path modulesDir;
     private final Logger log;
+    private final boolean memory;
     private final Map<Path, ConfigFile> open = new ConcurrentHashMap<>();
 
-    ConfigFiles(Path modulesDir, Logger log) {
+    ConfigFiles(Path modulesDir, Logger log, boolean memory) {
         this.modulesDir = modulesDir;
         this.log = log;
+        this.memory = memory;
     }
 
     ConfigFile open(Identifier moduleId, @Nullable String name) {
@@ -28,6 +32,9 @@ final class ConfigFiles {
                 ? modulesDir.resolve(moduleId.path() + ".toml")
                 : modulesDir.resolve(moduleId.path()).resolve(name + ".toml");
         return open.computeIfAbsent(file, f -> {
+            if (memory) {
+                return Configs.memory(ConfigFormat.TOML);
+            }
             try {
                 Files.createDirectories(f.getParent());
             } catch (IOException e) {
@@ -40,6 +47,11 @@ final class ConfigFiles {
     void syncAll() {
         for (ConfigFile file : open.values()) {
             file.sync();
+            try {
+                file.verify();
+            } catch (InvalidConfigException e) {
+                log.warn("Unknown keys in {}: {}", file.path(), e.getMessage());
+            }
         }
     }
 

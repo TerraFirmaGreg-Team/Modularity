@@ -349,4 +349,204 @@ class KernelTest {
     void invalidAppIdRejected() {
         assertThrows(IllegalArgumentException.class, () -> Kernel.builder("Bad App!"));
     }
+
+    @Test
+    void setEnabledTogglesAtRuntimeAndCascades() throws Exception {
+        calls.clear();
+        val reg = ModuleRegistrate.create("testapp-rt");
+        reg.entry("alpha", Alpha::new).register();
+        reg.entry("beta", Beta::new).dependsOn("alpha").register();
+        reg.entry("gamma", Gated::new).register();
+        val kernel = kernel(reg);
+        kernel.load();
+        assertTrue(kernel.isModuleEnabled("beta"));
+
+        calls.clear();
+        kernel.setEnabled("alpha", false);
+        assertFalse(kernel.isModuleEnabled("alpha"));
+        assertFalse(kernel.isModuleEnabled("beta"));
+        assertTrue(kernel.isModuleEnabled("gamma"));
+        assertTrue(calls.contains("alpha.disable"));
+        assertEquals(
+                Failure.Kind.DEPENDENCY,
+                kernel.status("beta").orElseThrow().failure().kind());
+        assertTrue(Files.readString(dir.resolve("modules.toml")).contains("enabled = false"));
+
+        calls.clear();
+        kernel.setEnabled("alpha", true);
+        assertTrue(kernel.isModuleEnabled("alpha"));
+        assertTrue(kernel.isModuleEnabled("beta"));
+        assertTrue(calls.contains("alpha.enable"));
+    }
+
+    @Test
+    void setEnabledRejectsInvalidTargets() {
+        val reg = ModuleRegistrate.create("testapp-rtrej");
+        reg.entry("core", Alpha::new).alwaysOn().register();
+        val kernel = kernel(reg);
+        assertThrows(IllegalStateException.class, () -> kernel.setEnabled("core", false));
+        kernel.load();
+        assertThrows(IllegalArgumentException.class, () -> kernel.setEnabled("nope", true));
+        assertThrows(IllegalStateException.class, () -> kernel.setEnabled("core", false));
+    }
+
+    @Test
+    void statusReportsActivationTimings() {
+        val reg = ModuleRegistrate.create("testapp-timing");
+        reg.entry("alpha", Alpha::new).register();
+        val kernel = kernel(reg);
+        kernel.load();
+
+        val timings = kernel.status("alpha").orElseThrow().timings();
+        assertTrue(timings.totalNanos() > 0);
+        assertTrue(timings.enableNanos() >= 0);
+    }
+
+    @Test
+    void applyTogglesAppliesFileDiff() throws Exception {
+        calls.clear();
+        val reg = ModuleRegistrate.create("testapp-apply");
+        reg.entry("alpha", Alpha::new).register();
+        reg.entry("beta", Beta::new).dependsOn("alpha").register();
+        val kernel = kernel(reg);
+        kernel.load();
+        assertTrue(kernel.isModuleEnabled("alpha"));
+
+        Files.writeString(dir.resolve("modules.toml"), """
+                [alpha]
+                enabled = false
+                """);
+        assertTrue(kernel.applyToggles());
+        assertFalse(kernel.isModuleEnabled("alpha"));
+        assertFalse(kernel.isModuleEnabled("beta"));
+        assertTrue(calls.contains("alpha.disable"));
+
+        Files.writeString(dir.resolve("modules.toml"), """
+                [alpha]
+                enabled = true
+                """);
+        assertTrue(kernel.applyToggles());
+        assertTrue(kernel.isModuleEnabled("alpha"));
+        assertTrue(kernel.isModuleEnabled("beta"));
+
+        assertFalse(kernel.applyToggles());
+    }
+
+    @Test
+    void applyTogglesRequiresLoadedKernel() {
+        val reg = ModuleRegistrate.create("testapp-applyul");
+        reg.entry("alpha", Alpha::new).register();
+        val kernel = kernel(reg);
+        assertThrows(IllegalStateException.class, kernel::applyToggles);
+    }
+
+    @Test
+    void cleanupsRunOnDisableLifo() {
+        calls.clear();
+        val cleaned = new ArrayList<String>();
+        val reg = ModuleRegistrate.create("testapp-cln");
+        reg.entry("alpha", Alpha::new).register();
+        reg.entry("beta", Beta::new).dependsOn("alpha").register();
+        val kernel = kernel(reg);
+        kernel.load();
+
+        val alpha = kernel.entry("alpha");
+        alpha.context().orElseThrow().cleanup(() -> cleaned.add("first"));
+        alpha.context().orElseThrow().cleanup(() -> cleaned.add("second"));
+
+        kernel.setEnabled("alpha", false);
+        assertEquals(List.of("second", "first"), cleaned);
+
+        cleaned.clear();
+        kernel.setEnabled("alpha", true);
+        kernel.unload();
+        assertTrue(cleaned.isEmpty());
+    }
+
+    @Test
+    void closeUnloadsKernel() {
+        calls.clear();
+        val reg = ModuleRegistrate.create("testapp-close");
+        reg.entry("alpha", Alpha::new).register();
+        try (val kernel = kernel(reg)) {
+            kernel.load();
+            assertTrue(kernel.isModuleEnabled("alpha"));
+        }
+        assertTrue(calls.contains("alpha.disable"));
+    }
+
+    @Test
+    void postAsyncDeliversEvent() throws Exception {
+        val got = new ArrayList<Msg>();
+        val reg = ModuleRegistrate.create("testapp-async");
+        reg.entry("mod", SpecListener::new).listener(Msg.class, got::add).register();
+        val kernel = kernel(reg);
+        kernel.load();
+
+        kernel.postAsync(new Msg("async")).get();
+        assertEquals(1, got.size());
+        assertEquals("async", got.get(0).text);
+    }
+
+    @Test
+    void reportTextListsModuleStates() {
+        val reg = ModuleRegistrate.create("testapp-rtxt");
+        reg.entry("alpha", Alpha::new).register();
+        reg.entry("boom", Boom::new).register();
+        val kernel = kernel(reg);
+        kernel.load();
+
+        val text = kernel.reportText();
+        assertTrue(text.contains("alpha"), text);
+        assertTrue(text.contains("boom"), text);
+        assertTrue(text.contains("ENABLE"), text);
+        assertTrue(text.contains("enabled"), text);
+    }
+
+    @Test
+    void memoryConfigsAvoidFilesystem() {
+        calls.clear();
+        val reg = ModuleRegistrate.create("testapp-mem");
+        reg.entry("alpha", Alpha::new).register();
+        val kernel = Kernel.builder("testapp-mem")
+                .configDir(dir)
+                .memoryConfigs()
+                .registrate(reg)
+                .build();
+        kernel.load();
+        assertTrue(kernel.isModuleEnabled("alpha"));
+
+        kernel.setEnabled("alpha", false);
+        assertFalse(kernel.isModuleEnabled("alpha"));
+        assertFalse(Files.exists(dir.resolve("modules.toml")));
+        assertFalse(Files.exists(dir.resolve("modules")));
+    }
+
+    @Test
+    void beforeOrdersSoftlyAgainstRegistrationOrder() {
+        calls.clear();
+        val reg = ModuleRegistrate.create("testapp-before");
+        reg.entry("late", Beta::new).register();
+        reg.entry("early", Alpha::new).before("late").register();
+        val kernel = kernel(reg);
+        kernel.load();
+
+        assertEquals(List.of("alpha.declare", "alpha.enable", "beta.enable"), calls);
+    }
+
+    @Test
+    void reloadedEventPostsAfterOnReload() {
+        calls.clear();
+        val got = new ArrayList<ModuleEvent.Reloaded>();
+        val reg = ModuleRegistrate.create("testapp-mrel");
+        reg.entry("alpha", Alpha::new).register();
+        val kernel = kernel(reg);
+        kernel.bus().addListener(ModuleEvent.Reloaded.class, got::add);
+        kernel.load();
+
+        kernel.reload();
+        assertEquals(1, got.size());
+        assertEquals("alpha", got.get(0).id().path());
+        assertTrue(calls.contains("alpha.reload"));
+    }
 }

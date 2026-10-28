@@ -16,19 +16,8 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(findProperty('java_version') as String)
     }
-}
-
-repositories {
-    mavenLocal()
-    mavenCentral()
-    maven {
-        name = 'GitHubPackages'
-        url = uri('https://maven.pkg.github.com/terrafirmagreg-team/konf')
-        credentials {
-            username = findProperty('gpr.user') ?: System.getenv('GITHUB_ACTOR')
-            password = findProperty('gpr.key') ?: System.getenv('GITHUB_TOKEN')
-        }
-    }
+    withSourcesJar()
+    withJavadocJar()
 }
 
 dependencies {
@@ -57,8 +46,23 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-Xlint:deprecation'
 }
 
+tasks.withType(Javadoc).configureEach {
+    options.quiet()
+    (options as StandardJavadocDocletOptions).addBooleanOption('Xdoclint:none', true)
+}
+
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
+    testLogging {
+        events 'failed'
+        exceptionFormat = 'full'
+        showStackTraces = true
+    }
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
 }
 
 spotless {
@@ -105,6 +109,25 @@ publishing {
         maven(MavenPublication) {
             from components.shadow
             artifactId = "${lib_name}"
+            pom {
+                name = "${lib_name}"
+                description = "${lib_description}"
+                url = "${lib_url}"
+                licenses {
+                    license {
+                        name = 'GNU Lesser General Public License v3.0'
+                        url = 'https://www.gnu.org/licenses/lgpl-3.0.html'
+                    }
+                }
+                developers {
+                    developer {
+                        name = "${lib_authors}"
+                    }
+                }
+                scm {
+                    url = "${lib_url}"
+                }
+            }
         }
     }
     repositories {

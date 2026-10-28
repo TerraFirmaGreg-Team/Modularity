@@ -16,6 +16,7 @@ public final class ModuleBuilder<T extends Module> {
 
     private final List<String> dependsOn = new ObjectArrayList<>();
     private final List<String> after = new ObjectArrayList<>();
+    private final List<String> before = new ObjectArrayList<>();
     private final List<Object> subscribers = new ObjectArrayList<>();
     private final List<ListenerDecl<?>> listeners = new ObjectArrayList<>();
     private final List<BooleanSupplier> gates = new ObjectArrayList<>();
@@ -50,6 +51,18 @@ public final class ModuleBuilder<T extends Module> {
 
     public ModuleBuilder<T> after(String... ids) {
         after.addAll(List.of(ids));
+        return this;
+    }
+
+    public ModuleBuilder<T> before(ModuleEntry<?>... entries) {
+        for (ModuleEntry<?> entry : entries) {
+            before.add(entry.id().path());
+        }
+        return this;
+    }
+
+    public ModuleBuilder<T> before(String... ids) {
+        before.addAll(List.of(ids));
         return this;
     }
 
@@ -90,8 +103,8 @@ public final class ModuleBuilder<T extends Module> {
     }
 
     public ModuleEntry<T> register() {
-        ModuleSpec spec =
-                new ModuleSpec(dependsOn, after, subscribers, listeners, gates, alwaysOn, category, description);
+        ModuleSpec spec = new ModuleSpec(
+                dependsOn, after, before, subscribers, listeners, gates, alwaysOn, category, description);
         return owner.add(new ModuleEntry<>(id, spec, factory));
     }
 }

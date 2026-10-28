@@ -10,3 +10,22 @@ plugins {
 }
 
 rootProject.name = "Modularity"
+
+dependencyResolutionManagement {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven {
+            name = 'GitHubPackages'
+            url = uri('https://maven.pkg.github.com/terrafirmagreg-team/konf')
+            credentials {
+                username = providers.gradleProperty('gpr.user')
+                        .orElse(providers.environmentVariable('GITHUB_ACTOR'))
+                        .orNull
+                password = providers.gradleProperty('gpr.key')
+                        .orElse(providers.environmentVariable('GITHUB_TOKEN'))
+                        .orNull
+            }
+        }
+    }
+}

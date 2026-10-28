@@ -13,6 +13,7 @@ public abstract class UnitEntry<T, C> extends BaseEntry<T> {
     private final Supplier<T> factory;
     private final List<SubscriberEntry> subscribers = new ObjectArrayList<>();
     private final List<ListenerEntry<?>> listeners = new ObjectArrayList<>();
+    private final List<Runnable> cleanups = new ObjectArrayList<>();
     private boolean componentsDeclared;
     private C context;
 
@@ -44,6 +45,14 @@ public abstract class UnitEntry<T, C> extends BaseEntry<T> {
         return listeners;
     }
 
+    public void cleanup(Runnable runnable) {
+        cleanups.add(runnable);
+    }
+
+    public List<Runnable> cleanups() {
+        return cleanups;
+    }
+
     public boolean claimDeclaration() {
         if (componentsDeclared) {
             return false;
@@ -56,6 +65,7 @@ public abstract class UnitEntry<T, C> extends BaseEntry<T> {
         componentsDeclared = false;
         subscribers.clear();
         listeners.clear();
+        cleanups.clear();
     }
 
     public Optional<C> context() {

@@ -6,6 +6,7 @@ import java.util.function.BooleanSupplier;
 public record ModuleSpec(
         List<String> dependsOn,
         List<String> after,
+        List<String> before,
         List<Object> subscribers,
         List<ListenerDecl<?>> listeners,
         List<BooleanSupplier> gates,
@@ -15,6 +16,7 @@ public record ModuleSpec(
     public ModuleSpec {
         dependsOn = List.copyOf(dependsOn);
         after = List.copyOf(after);
+        before = List.copyOf(before);
         subscribers = List.copyOf(subscribers);
         listeners = List.copyOf(listeners);
         gates = List.copyOf(gates);

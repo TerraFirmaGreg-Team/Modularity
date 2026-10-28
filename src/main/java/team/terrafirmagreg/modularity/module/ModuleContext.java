@@ -1,6 +1,7 @@
 package team.terrafirmagreg.modularity.module;
 
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import lombok.Getter;
@@ -37,6 +38,14 @@ public final class ModuleContext {
         return kernel.bus();
     }
 
+    public <T extends Event> T post(T event) {
+        return kernel.post(event);
+    }
+
+    public <T extends Event> CompletableFuture<T> postAsync(T event) {
+        return kernel.postAsync(event);
+    }
+
     public ConfigFile config() {
         return kernel.config(id, null);
     }
@@ -47,6 +56,10 @@ public final class ModuleContext {
 
     public void subscriber(String path, Supplier<Object> supplier) {
         entry.subscriber(path, supplier);
+    }
+
+    public void cleanup(Runnable runnable) {
+        entry.cleanup(runnable);
     }
 
     public <T extends Event> void listen(Class<T> type, Consumer<T> listener) {

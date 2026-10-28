@@ -4,7 +4,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.Consumer;
 import net.neoforged.bus.api.BusBuilder;
 import net.neoforged.bus.api.Event;
@@ -20,13 +23,19 @@ public final class EventBus {
     private final Set<Object> subscribers = ConcurrentHashMap.newKeySet();
     private final Map<ScanKey, Boolean> hasHandlers = new ConcurrentHashMap<>();
     private final Logger log;
+    private final Executor asyncExecutor;
 
     public EventBus() {
         this(LoggerFactory.getLogger(EventBus.class));
     }
 
     public EventBus(Logger log) {
+        this(log, ForkJoinPool.commonPool());
+    }
+
+    public EventBus(Logger log, Executor asyncExecutor) {
         this.log = log;
+        this.asyncExecutor = asyncExecutor;
         this.bus = BusBuilder.builder()
                 .setExceptionHandler((b, event, listeners, i, t) -> this.log.error(
                         "Event listener threw on {}", event.getClass().getName(), t))
@@ -73,6 +82,10 @@ public final class EventBus {
 
     public <T extends Event> T post(T event) {
         return bus.post(event);
+    }
+
+    public <T extends Event> CompletableFuture<T> postAsync(T event) {
+        return CompletableFuture.supplyAsync(() -> bus.post(event), asyncExecutor);
     }
 
     private record ScanKey(Class<?> type, boolean statics) {}
